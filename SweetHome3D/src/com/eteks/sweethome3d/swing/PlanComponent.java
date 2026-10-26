@@ -2004,10 +2004,40 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
   }
   
   /**
-   * Prints this component plan at the scale given in the home print attributes or at a scale 
-   * that makes it fill <code>pageFormat</code> imageable size if this attribute is <code>null</code>.
+   * Prints one fitted plan page per viewable level in home order. For homes without
+   * levels, uses the scale given in the home print attributes or fits the plan to the page.
    */
   public int print(Graphics g, PageFormat pageFormat, int pageIndex) {
+    if (pageIndex < 0) {
+      return NO_SUCH_PAGE;
+    }
+    if (this.home.getLevels().isEmpty()) {
+      return printSelectedLevel(g, pageFormat, pageIndex, false);
+    }
+
+    // Each viewable level gets one plan page, in the home's level order.
+    Level selectedLevel = this.home.getSelectedLevel();
+    try {
+      int levelPage = 0;
+      for (Level level : this.home.getLevels()) {
+        if (level.isViewable() && levelPage++ == pageIndex) {
+          this.home.setSelectedLevel(level);
+          printSelectedLevel(g, pageFormat, 0, true);
+          // Keep a page even for an empty level so later levels remain printable.
+          return PAGE_EXISTS;
+        }
+      }
+      return NO_SUCH_PAGE;
+    } finally {
+      this.home.setSelectedLevel(selectedLevel);
+    }
+  }
+
+  /**
+   * Prints the selected level, fitting it to one page for multi-level printing.
+   */
+  private int printSelectedLevel(Graphics g, PageFormat pageFormat, int pageIndex,
+                                 boolean fitToPage) {
     List<Selectable> printedItems = getPaintedItems(); 
     Rectangle2D printedItemBounds = getItemsBounds(g, printedItems);
     if (printedItemBounds != null) {
@@ -2020,7 +2050,7 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
       float columnIndex;
       int pagesPerRow;
       int pagesPerColumn;
-      if (this.home.getPrint() == null || this.home.getPrint().getPlanScale() == null) {
+      if (fitToPage || this.home.getPrint() == null || this.home.getPrint().getPlanScale() == null) {
         // Compute a scale that ensures the plan will fill the component if plan scale is null
         printScale = getPrintPreferredScale(g, pageFormat) * LengthUnit.centimeterToInch(72);
         if (pageIndex > 0) {
